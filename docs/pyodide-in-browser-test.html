@@ -1,0 +1,221 @@
+<!--
+
+Test of pyodide, with
+	- stdout and stderr collected and displayed in a pre element
+	- error message sent to stderr
+	- last result displayed with sys.displayhook
+	- dynamic loading of modules referenced by import statements
+	- file support
+	- matplotlib support
+
+Author: Yves Piguet, EPFL, 2019
+
+-->
+
+<!doctype html>
+
+<html>
+    <head>
+        <meta charset="utf-8"/>
+        <script src="pyodide.js"></script>
+        <script>
+
+			window.addEventListener("load", () => {
+
+				let btnRun = document.getElementById("btn-run");
+				let btnClear = document.getElementById("btn-clear");
+				let elSrc = document.getElementById("src");
+				let elOutput = document.getElementById("output");
+
+				let moduleNames = [];
+				self.addModuleName = function (name) {
+					if (moduleNames.indexOf(name) < 0) {
+						moduleNames.push(name);
+					}
+				};
+				self.setFigureURL = function (url) {
+					document.getElementById("figure").src = url;
+				};
+
+				function run() {
+					btnRun.disabled = true;
+					btnClear.disabled = true;
+
+					// (re)set stdin and stderr
+					pyodide.runPython(`
+						import io, sys
+						sys.stdout = io.StringIO()
+						sys.stderr = sys.stdout
+					`);
+
+					let src = elSrc.value;
+					let errMsg = "";
+					let moduleNamesLen0 = moduleNames.length;
+					try {
+						self.runPythonOutput = pyodide.runPython(src);
+						pyodide.runPython(`
+							from js import runPythonOutput
+							import sys
+							sys.displayhook(runPythonOutput)
+						`);
+						if (moduleNames.indexOf("matplotlib") >= 0) {
+							pyodide.runPython(`
+								import matplotlib.pyplot, io, base64, js
+								with io.BytesIO() as buf:
+									matplotlib.pyplot.savefig(buf, format="png")
+									buf.seek(0)
+									js.setFigureURL("data:image/png;base64," +
+										base64.b64encode(buf.read()).decode("ascii"))
+							`);
+						}
+					} catch (err) {
+						if (/ModuleNotFoundError/.test(err.message) &&
+							moduleNames.length > moduleNamesLen0) {
+							pyodide.loadPackage(moduleNames)
+								.then(() => {
+									run();
+								});
+						} else {
+							errMsg = err.message;
+						}
+					}
+
+					let stdout = pyodide.runPython("sys.stdout.getvalue()");
+					elOutput.textContent += stdout + errMsg;
+
+					btnRun.disabled = false;
+					btnClear.disabled = false;
+				}
+				
+				self.clearFigure = function () {
+					if (moduleNames.indexOf("matplotlib") >= 0) {
+						pyodide.runPython(`
+							import matplotlib.pyplot
+							matplotlib.pyplot.clf()
+						`);
+						self.setFigureURL("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=");
+					}
+				}
+
+				languagePluginLoader.then(() => {
+
+					pyodide.runPython(`
+						import sys
+						from js import addModuleName
+						class __ImportIntercept:
+							def find_spec(self, name, path, module):
+								addModuleName(name)
+						sys.meta_path.append(__ImportIntercept())
+
+						import io
+						import js
+
+						class MyTextFile(io.StringIO):
+							def __init__(self, filename, mode="r"):
+								self.filename = filename
+								self.readOnly = mode == "r"
+								content = js.sessionStorage.getItem(filename)
+								if content is None:
+									if self.readOnly:
+										raise FileNotFoundError(filename)
+									content = ""
+								else:
+									if mode == "w":
+										content = ""
+									elif mode == "x":
+										raise FileExistsError(filename)
+								super().__init__(content if content is not None else "")
+								if mode == "a":
+									self.seek(0, 2)
+							def close(self):
+								if not self.readOnly:
+									content = self.getvalue()
+									js.sessionStorage.setItem(self.filename, content)
+									super().close()
+
+						global open
+						def open(filename, mode="r", encoding=None):
+							return MyTextFile(filename, mode)
+
+						import os
+
+						def __os_listdir(path="."):
+							return list(js.Object.keys(js.sessionStorage))
+						os.listdir = __os_listdir
+					`);
+
+					btnRun.disabled = false;
+					btnClear.disabled = false;
+
+					btnClear.addEventListener("click", () => {
+						elOutput.textContent = "";
+						self.clearFigure();
+					});
+
+					btnRun.addEventListener("click", run);
+				});
+
+				// editor tab key
+				elSrc.addEventListener("keydown", (ev) => {
+					if (ev.keyCode === 9) {
+						// prevent loss of focus in textarea
+						ev.preventDefault();
+						ev.cancelBubbles = true;
+						let text = elSrc.value;
+						let start = elSrc.selectionStart, end = elSrc.selectionEnd;
+						text = text.slice(0, start) + "\t" + text.slice(end);
+						elSrc.value = text;
+						elSrc.selectionStart = elSrc.selectionEnd = start + 1;
+						return false;
+					} else if ((ev.keyCode === 13 || ev.key === "Enter") && ev.shiftKey) {
+						// run
+						ev.preventDefault();
+						ev.cancelBubbles = true;
+						run();
+						return false;
+					}
+					// normal behavior
+					return true;
+				}, false);
+			}, false);
+        </script>
+    </head>
+    <body>
+
+<h3>Test of Pyodide in the browser main thread</h3>
+
+<textarea cols="80" rows="10" id="src" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+with open("foo.txt", "w") as f:
+	f.write("Hello, pyodide!\n")
+
+with open("foo.txt", "a") as f:
+	f.write("Bye.\n")
+
+with open("foo.txt") as f:
+	data = f.read()
+print(data)
+
+import matplotlib.pyplot as pp
+pp.plot([1,3,2])
+</textarea>
+
+<!--
+
+import numpy as np
+a = np.arange(15).reshape(3, 5)
+a.shape
+
+
+-->
+
+<p>
+<button id="btn-run" type="button" disabled>Run</button>
+<button id="btn-clear" type="button" disabled>Clear</button>
+</p>
+
+<pre id="output"></pre>
+
+<p><img id="figure"></p>
+
+    </body>
+</html>

@@ -1,0 +1,272 @@
+<!--
+
+Test of pyodide, with
+	- stdout and stderr collected and displayed in a pre element
+	- error message sent to stderr
+	- last result displayed with sys.displayhook
+	- dynamic loading of modules referenced by import statements
+	- runs asynchronously in a webworker, with timeout and interruption
+
+Author: Yves Piguet, EPFL, 2019-2020
+
+-->
+
+<!doctype html>
+
+<html>
+    <head>
+        <meta charset="utf-8"/>
+        <script src="pyodide-webworker-master.js"></script>
+		<script>
+
+window.addEventListener("load", () => {
+	let elSrc = document.getElementById("src");
+	let btnRun = document.getElementById("btn-run");
+	let btnStop = document.getElementById("btn-stop");
+	let btnClear = document.getElementById("btn-clear");
+    let btnDirty = document.getElementById("btn-dirty");
+    let elBusy = document.getElementById("busy");
+    let elStatus = document.getElementById("status");
+	let btnSubmit = document.getElementById("btn-submit");
+	let btnCancel = document.getElementById("btn-cancel");
+
+	let pyWorker = new PyWorker("pyodide-webworker.js");
+    let dirtyFiles = [];
+	pyWorker.timeout = 60
+	pyWorker.addCommand("alert", (msg) => { alert(msg); });
+	pyWorker.preload();
+	btnRun.addEventListener("click", () => {
+		let src = elSrc.value;
+		pyWorker.run(src);
+		btnRun.disabled = true;
+		btnStop.disabled = false;
+        elBusy.style.display = "inline-block";
+	}, false);
+	btnStop.addEventListener("click", () => {
+		pyWorker.stop();
+		pyWorker.preload();
+		btnRun.disabled = false;
+	}, false);
+	btnClear.addEventListener("click", () => {
+		pyWorker.clearOutput();
+        pyWorker.clearFigure();
+	}, false);
+    btnDirty.addEventListener("click", () => {
+        pyWorker.printToOutput("\nDirty files:\n" + dirtyFiles.join("\n") + "\n");
+        dirtyFiles.forEach((path) => {
+            pyWorker.getFile(path);
+        });
+    }, false);
+    function submit() {
+        let str = document.getElementById("input-field").value;
+        pyWorker.submitInput(str);
+		btnRun.disabled = true;
+		btnStop.disabled = false;
+        elBusy.style.display = "inline-block";
+        document.getElementById("input").style.display = "none";
+    }
+    function cancel() {
+        pyWorker.cancelInput();
+        document.getElementById("input").style.display = "none";
+    }
+    btnSubmit.addEventListener("click", submit, false);
+    btnCancel.addEventListener("click", cancel, false);
+    document.getElementById("input").addEventListener("keydown", (ev) => {
+		if (ev.keyCode === 10 || ev.keyCode === 13) {
+            submit();
+			return false;
+		}
+		// normal behavior
+		return true;
+	}, false);
+
+    pyWorker.onStatusChanged = (status) => {
+        elStatus.textContent = status || "ready";
+    };
+	pyWorker.onTerminated = () => {
+		btnStop.disabled = true;
+		btnRun.disabled = false;
+        elBusy.style.display = "none";
+	};
+	pyWorker.onOutput = (text) => {
+		document.getElementById("output").textContent = text;
+	};
+    pyWorker.onFigure = (imageDataURL) => {
+        document.getElementById("figure").src = imageDataURL;
+    };
+    pyWorker.onDirtyFile = (path) => {
+        dirtyFiles.push(path);
+    };
+    pyWorker.onFile = (path, data) => {
+        pyWorker.printToOutput("\nFile " + path + ":\n" + data + "\n");
+    };
+	pyWorker.onTimeout = () => {
+		pyWorker.printToOutput("\nTimeout\n");
+	};
+    pyWorker.onInput = (prompt) => {
+        document.getElementById("input").style.display = "block";
+        document.getElementById("input-prompt").textContent = prompt || "Input: ";
+        let fldInput = document.getElementById("input-field");
+        fldInput.value = "";
+        fldInput.focus();
+        fldInput.select();
+    };
+
+	// editor tab key
+	elSrc.addEventListener("keydown", (ev) => {
+		if (ev.keyCode === 9) {
+			// prevent loss of focus in textarea
+			ev.preventDefault();
+			ev.cancelBubbles = true;
+			let text = elSrc.value;
+			let start = elSrc.selectionStart, end = elSrc.selectionEnd;
+			text = text.slice(0, start) + "\t" + text.slice(end);
+			elSrc.value = text;
+			elSrc.selectionStart = elSrc.selectionEnd = start + 1;
+			return false;
+		}
+		// normal behavior
+		return true;
+	}, false);
+}, false);
+
+        </script>
+
+        <style>
+            .busy {
+                display: inline-block;
+                width: 0.5em;
+                height: 0.5em;
+                border-radius: 50%;
+                border: 1px solid transparent;
+                border-top: 2px solid #f00;
+                border-bottom: 2px solid #f00;
+                animation: busy-rot 2s linear infinite;
+            }
+            @keyframes busy-rot {
+                0% {
+                    transform: rotate(0deg);
+                }
+                100% {
+                    transform: rotate(360deg);
+                }
+            }
+
+            .status {
+                color: silver;
+                font: 70% sans-serif;
+            }
+        </style>
+    </head>
+    <body>
+
+<h3>Test of Pyodide in a webworker</h3>
+
+<textarea cols="80" rows="10" id="src" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="font-family: monospace; tab-size: 4;">
+def f():
+  for i in range(10):
+    print(i)
+
+f()
+</textarea>
+
+<p>
+Sample code:
+<a onclick="document.getElementById('src').value = document.getElementById('ex-def').textContent.trim();" href="#">def</a>
+<a onclick="document.getElementById('src').value = document.getElementById('ex-input').textContent.trim();" href="#">input</a>
+<a onclick="document.getElementById('src').value = document.getElementById('ex-files').textContent.trim();" href="#">files</a>
+<a onclick="document.getElementById('src').value = document.getElementById('ex-numpy').textContent.trim();" href="#">numpy</a>
+<a onclick="document.getElementById('src').value = document.getElementById('ex-matplotlib').textContent.trim();" href="#">matplotlib</a>
+<a onclick="document.getElementById('src').value = document.getElementById('ex-pandas').textContent.trim();" href="#">pandas</a>
+</p>
+
+<script id="ex-def" type="text/x-sample-code">
+def f():
+  for i in range(10):
+    print(i)
+
+f()
+</script>
+
+<script id="ex-input" type="text/x-sample-code">
+str = input("Number: ")
+print("10 times", str, "is", 10 * float(str))
+print(input("First: "), input("Second: "), input("Third: "))
+</script>
+
+<script id="ex-files" type="text/x-sample-code">
+with open("foo.txt", "w") as f:
+	f.write("Hello, pyodide!\n")
+
+with open("foo.txt", "a") as f:
+	f.write("Bye.\n")
+
+with open("foo.txt") as f:
+	data = f.read()
+print(data)
+</script>
+
+<script id="ex-numpy" type="text/x-sample-code">
+import numpy as np
+a = np.arange(4).reshape(2, 2)
+print("a =", a)
+print("a.shape =", a.shape)
+
+import numpy.linalg as linalg
+b = np.array([[1, 2, 3],[4, 5, 6],[5, 2, 1]])
+bi = linalg.inv(b)
+print("b =", b)
+print("inv b =", bi)
+</script>
+
+<script id="ex-matplotlib" type="text/x-sample-code">
+import matplotlib.pyplot as pp
+pp.plot([1,3,2])
+</script>
+
+<script id="ex-pandas" type="text/x-sample-code">
+# based on https://pandas.pydata.org/pandas-docs/stable/getting_started/10min.html
+
+import numpy as np
+import pandas as pd
+
+s = pd.Series([1, 3, 5, np.nan, 6, 8])
+print(s)
+
+dates = pd.date_range('20130101', periods=6)
+print(dates)
+
+df = pd.DataFrame(np.random.randn(6, 4), index=dates, columns=list('ABCD'))
+print(df)
+
+df2 = pd.DataFrame({'A': 1.,
+                    'B': pd.Timestamp('20130102'),
+                    'C': pd.Series(1, index=list(range(4)), dtype='float32'),
+                    'D': np.array([3] * 4, dtype='int32'),
+                    'E': pd.Categorical(["test", "train", "test", "train"]),
+                    'F': 'foo'})
+print(df2)
+print(df2.dtypes)
+</script>
+
+<p>
+<button id="btn-run" type="button">Run</button>
+<button id="btn-stop" type="button" disabled>Stop</button>
+<button id="btn-clear" type="button">Clear</button>
+<button id="btn-dirty" type="button">Dirty</button>
+&nbsp;&nbsp;<span id="busy" class="busy" style="display: none"></span>
+&nbsp;&nbsp;<span id="status" class="status"></span>
+</p>
+
+<p id="input" style="display: none">
+<span id="input-prompt"></span>
+<input id="input-field" value="">
+<button id="btn-submit">Enter</button>
+<button id="btn-cancel">Cancel</button>
+</p>
+
+<pre id="output"></pre>
+<p><img id="figure"></p>
+
+    </body>
+</html>
