@@ -130,7 +130,8 @@ class Pyodide {
 
     load(then) {
         this.notifyStatus("loading Pyodide");
-        self.languagePluginUrl = "pyodide-build-0.14.1/";
+        // self.languagePluginUrl = "pyodide-build-0.14.1/";
+	self.languagePluginUrl = "https://pyodide.cdn.iodide.io/";
         languagePluginLoader.then(() => {
 
             this.notifyStatus("setup");
