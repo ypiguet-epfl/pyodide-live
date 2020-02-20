@@ -46,7 +46,8 @@ Make sure that .wasm is served with mime type application/wasm
 
 */
 
-importScripts("pyodide-class.js", "pyodide-build-0.14.1/pyodide.js");
+// importScripts("pyodide-class.js", "pyodide-build-0.14.1/pyodide.js");
+importScripts("pyodide-class.js", "https://pyodide.cdn.iodide.io/pyodide.js");
 
 var loaded = false;
 
