@@ -24,7 +24,7 @@ function setSource(src) {
     if (pyWorker.isSuspended) {
         pyWorker.dbgResume("quit");
     }
-    srcEditor.setValue(src, 1); 
+    srcEditor.setValue(src, 1);
     srcEditor.session.clearBreakpoints();
 }
 
@@ -115,7 +115,7 @@ window.addEventListener("load", () => {
         return bpLines;
     }
 
-	pyWorker = new PyWorker("pyodide-webworker.js");
+	pyWorker = new PyWorker("pyodide-webworker.js" + document.location.search);
     let dirtyFiles = [];
     let dbgCurrentLine = null;
 	pyWorker.timeout = 60

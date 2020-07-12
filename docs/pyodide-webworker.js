@@ -7,6 +7,9 @@ Test of pyodide, with
 	- dynamic loading of modules referenced by import statements
 	- runs asynchronously in a webworker, with timeout and interruption
 
+Pyodide URL passed be passed URL-encoded in the query string. The default
+is https://pyodide.cdn.iodide.io/pyodide.js (Pyodide 0.14.3 as of July 2020).
+
 Messages sent from main thread to webworker: json, {cmd:string,...}, with:
 - cmd="config": options={sharedOutput:b}
 - cmd="preload": load Pyodide to execute first "run" quicker
@@ -30,24 +33,12 @@ Author: Yves Piguet, EPFL, 2019-2020
 
 */
 
-/*
+// get Pyodide URL from query string if specified there, or use default
+const pyodideURL = self.location.search
+	? decodeURIComponent(self.location.search.replace(/^\?/, ""))
+	: "https://pyodide.cdn.iodide.io/pyodide.js";
 
-Patch for pyodide.js:
-
-YP/2019-Aug-29
-replace line 11
-  baseURL = baseURL.substr(0, baseURL.lastIndexOf('/')) + '/';
-with
-  baseURL = baseURL && baseURL.substr(0, baseURL.lastIndexOf('/')) + '/';
-to support url without slash (otherwise baseURL would wrongly become absolute)
-
-Make sure that .wasm is served with mime type application/wasm
-(in apache2: /etc/apache2/mime.types)
-
-*/
-
-// importScripts("pyodide-class.js", "pyodide-build-0.14.1/pyodide.js");
-importScripts("pyodide-class.js", "https://pyodide.cdn.iodide.io/pyodide.js");
+importScripts("pyodide-class.js", pyodideURL);
 
 var loaded = false;
 
