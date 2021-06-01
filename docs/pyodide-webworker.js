@@ -29,14 +29,14 @@ Messages sent from webworker to main thread: json, {cmd:string,...}, with:
 - cmd="input": prompt=string or null, expect a message back with cmd="submit"
 - cmd="print": data=string to be appeded to the output
 
-Author: Yves Piguet, EPFL, 2019-2020
+Author: Yves Piguet, EPFL, 2019-2021
 
 */
 
 // get Pyodide URL from query string if specified there, or use default
 const pyodideURL = self.location.search
 	? decodeURIComponent(self.location.search.replace(/^\?/, ""))
-	: "https://pyodide.cdn.iodide.io/pyodide.js";
+	: "https://pyodide-cdn2.iodide.io/v0.15.0/full/pyodide.js";
 
 importScripts("pyodide-class.js", pyodideURL);
 

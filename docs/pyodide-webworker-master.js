@@ -22,6 +22,7 @@ pyWorker.onFigure = (imageDataURL) => { ... }
 pyWorker.onTimeout = () => { ... };
 pyWorker.onDirtyFile = (path) => { ... };
 pyWorker.onFile = (path, data) => { ... };
+pyWorker.onError = (event) => { ... };
 pyWorker.addCommand("name", (data) => { ... });
 
 pyWorker.preload();	// optional
@@ -48,6 +49,7 @@ class PyWorker {
 
         // callbacks
         this.sharedOutput = false;  // onOutput always called with append=false
+		this.onError = null;	// default: console.info
 		this.onOutput = null;
         this.onInput = null;
         this.onFigure = null;
@@ -124,7 +126,11 @@ class PyWorker {
 			}
 		});
 		this.worker.addEventListener("error", (ev) => {
-			console.info(ev);
+			if (this.onError) {
+				this.onError(ev);
+			} else {
+				console.info(ev);
+			}
 		});
 
 		const msg = {

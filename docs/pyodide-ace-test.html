@@ -11,93 +11,19 @@ Author: Yves Piguet, EPFL, 2019-2020
 <html>
     <head>
         <meta charset="utf-8"/>
+        <link rel="stylesheet" type="text/css" href="pyodide-ace.css">
+        <link rel="stylesheet" type="text/css" href="column-layout.css">
         <script src="pyodide-webworker-master.js"></script>
+        <script src="pyodide-ace.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.7/ace.js"></script>
 		<script>
 
-var srcEditor;
-var outputEditor;
-var inputStart = null;
-var pyWorker = null;
-
-function setSource(src) {
-    if (pyWorker.isSuspended) {
-        pyWorker.dbgResume("quit");
-    }
-    srcEditor.setValue(src, 1);
-    srcEditor.session.clearBreakpoints();
-}
+var pui = null;
 
 window.addEventListener("load", () => {
-    srcEditor = ace.edit("src-editor");
-    srcEditor.setTheme("ace/theme/chrome");
-    srcEditor.session.setMode("ace/mode/python");
-    // breakpoints
-    srcEditor.on("guttermousedown", (e) => {
-        let target = e.domEvent.target;
-        if (target.className.indexOf("ace_gutter-cell") != -1 &&
-            e.clientX <= 25 + target.getBoundingClientRect().left &&
-            !e.editor.getReadOnly()) {
-            const row = e.getDocumentPosition().row;
-            const breakpoints = e.editor.session.getBreakpoints(row, 0);
-            if (breakpoints[row] === undefined) {
-                e.editor.session.setBreakpoint(row);
-            } else {
-                e.editor.session.clearBreakpoint(row);
-            }
-            e.stop();
-        }
-    })
-
-    outputEditor = ace.edit("output-editor", {
-        mode: "ace/mode/text",
-        theme: "ace/theme/chrome",
-        readOnly: true
-    });
-    // inline input
-    outputEditor.commands.on("exec", function(e) {
-        if (!e.command.readOnly) {
-            let range = outputEditor.selection.getRange();
-            let lastRow = outputEditor.session.getLength() - 1;
-            if (range.start.row !== lastRow ||
-                (e.command.name == "backspace" || e.command.name == "removewordleft") &&
-                    range.start.column === 0 && range.end.column === 0) {
-                e.preventDefault();
-            }
-        }
-    });
-    outputEditor.container.addEventListener("keypress", function (keyEvent) {
-        if (inputStart && keyEvent.key === "Enter") {
-            outputEditor.gotoLine(1e9);
-            const currentPos = outputEditor.selection.getCursor();
-            const inputRange = new ace.Range(inputStart.row, inputStart.column, currentPos.row, currentPos.column);
-            const str = outputEditor.session.getTextRange(inputRange);
-            outputEditor.insert("\n");
-    		btnRun.disabled = true;
-    		btnStop.disabled = false;
-            elBusy.style.display = "inline-block";
-            outputEditor.setReadOnly(true);
-            document.getElementById("output-editor").parentElement.className = "dont-expect-input";
-            inputStart = null;
-            pyWorker.submitInput(str);
-        }
-        return false;
-    }, true);
-    outputEditor.commands.addCommand({
-        name: "cancel-input",
-        bindKey: "Esc",
-        exec: function () {
-            pyWorker.cancelInput();
-            outputEditor.setReadOnly(true);
-            document.getElementById("output-editor").parentElement.className = "dont-expect-input";
-            inputStart = null;
-        }
-    });
-
-	const btnRun = document.getElementById("btn-run");
+    const btnRun = document.getElementById("btn-run");
 	const btnStop = document.getElementById("btn-stop");
 	const btnClear = document.getElementById("btn-clear");
-    const btnDirty = document.getElementById("btn-dirty");
     const elBusy = document.getElementById("busy");
     const elStatus = document.getElementById("status");
     const spanDebugger = document.getElementById("debugger");
@@ -107,214 +33,80 @@ window.addEventListener("load", () => {
     const btnDbgCont = document.getElementById("btn-dbg-cont");
     const btnDbgQuit = document.getElementById("btn-dbg-quit");
 
-    function getBreakpoints() {
-        const breakpoints = srcEditor.session.getBreakpoints();
-        const bpLines = breakpoints
-            .map((cls, i) => cls ? i + 1 : null)
-            .filter((line) => line !== null);
-        return bpLines;
-    }
+    pui = new PyodideUI({
+        srcEditorId: "src-editor",
+        outputEditorId: "output-editor",
+        onTerminated: () => {
+            btnStop.disabled = true;
+    		btnRun.disabled = false;
+            elBusy.style.display = "none";
+        },
+        onChangeStatus: (status) => {
+            switch (status) {
+            case "startup":
+                btnRun.disabled = true;
+                elBusy.style.display = "inline-block";
+                spanDebugger.style.display = "none";
+                break;
+            case "running":
+                btnRun.disabled = true;
+        		btnStop.disabled = false;
+                elBusy.style.display = "inline-block";
+                break;
+            case "input":
+                btnRun.disabled = false;
+                btnStop.disabled = false;
+                elBusy.style.display = "none";
+                spanDebugger.style.display = "none";
+                break;
+            case "ready":
+                elBusy.style.display = "none";
+                spanDebugger.style.display = "none";
+                break;
+            case "debug":
+                elBusy.style.display = "none";
+                spanDebugger.style.display = "inline-block";
+                break;
+            }
+            elStatus.textContent = status;
+        },
+        figureId: "figure",
+        onFile: (path, data) => {
+            pui.printToOutput("\nFile " + path + ":\n" + data + "\n");
+        },
+        debugger: true,
+        onSwitchDebugger: (debug) => {
+            document.getElementById("debugger").style.display = debug ? "inline" : "none";
+        }
+    });
 
-	pyWorker = new PyWorker("pyodide-webworker.js" + document.location.search);
-    let dirtyFiles = [];
-    let dbgCurrentLine = null;
-	pyWorker.timeout = 60
-	pyWorker.addCommand("alert", (msg) => { alert(msg); });
 	btnRun.addEventListener("click", () => {
-		const src = srcEditor.getValue();
-        pyWorker.run(src, getBreakpoints());
-		btnRun.disabled = true;
-		btnStop.disabled = false;
-        elBusy.style.display = "inline-block";
+        pui.run();
 	}, false);
 	btnStop.addEventListener("click", () => {
-		pyWorker.stop();
-		pyWorker.preload();
-		btnRun.disabled = false;
+		pui.stop();
     }, false);
     btnDbgNext.addEventListener("click", () => {
-        pyWorker.dbgResume("next");
-		btnRun.disabled = true;
-		btnStop.disabled = false;
-        elBusy.style.display = "inline-block";
+        pui.next();
     }, false);
     btnDbgStep.addEventListener("click", () => {
-        pyWorker.dbgResume("step");
-		btnRun.disabled = true;
-		btnStop.disabled = false;
-        elBusy.style.display = "inline-block";
+        pui.stepIn();
     }, false);
     btnDbgRet.addEventListener("click", () => {
-        pyWorker.dbgResume("return");
-		btnRun.disabled = true;
-		btnStop.disabled = false;
-        elBusy.style.display = "inline-block";
+        pui.stepOut();
     }, false);
     btnDbgCont.addEventListener("click", () => {
-        pyWorker.dbgResume("continue");
-		btnRun.disabled = true;
-		btnStop.disabled = false;
-        elBusy.style.display = "inline-block";
+        pui.continueDebugging();
     }, false);
     btnDbgQuit.addEventListener("click", () => {
-        pyWorker.dbgResume("quit");
-		btnRun.disabled = true;
-		btnStop.disabled = false;
-        elBusy.style.display = "inline-block";
+        pui.quitDebugging();
     }, false);
 	btnClear.addEventListener("click", () => {
-		pyWorker.clearOutput();
-        pyWorker.clearFigure();
+        pui.clear();
 	}, false);
-    btnDirty.addEventListener("click", () => {
-        pyWorker.printToOutput("\nDirty files:\n" + dirtyFiles.join("\n") + "\n");
-        dirtyFiles.forEach((path) => {
-            pyWorker.getFile(path);
-        });
-    }, false);
-
-    pyWorker.onStatusChanged = (status) => {
-        elStatus.textContent = status || (pyWorker.isSuspended ? "debug" : "ready");
-        spanDebugger.style.display = pyWorker.isSuspended ? "inline" : "none";
-        if (dbgCurrentLine != null) {
-            srcEditor.setReadOnly(false);
-            srcEditor.session.removeGutterDecoration(dbgCurrentLine - 1, "dbg-current-line");
-            dbgCurrentLine = null;
-        }
-        if (pyWorker.isSuspended) {
-            srcEditor.setReadOnly(true);
-            dbgCurrentLine = pyWorker.dbgCurrentLine;
-            srcEditor.session.addGutterDecoration(dbgCurrentLine - 1, "dbg-current-line");
-        }
-    };
-	pyWorker.onTerminated = () => {
-		btnStop.disabled = true;
-		btnRun.disabled = false;
-        elBusy.style.display = "none";
-	};
-    pyWorker.sharedOutput = true;
-	pyWorker.onOutput = (text, append) => {
-        if (append) {
-            outputEditor.gotoLine(1e9);
-    		outputEditor.insert(text);
-        } else {
-            outputEditor.setValue(text);
-            outputEditor.gotoLine(1e9);
-        }
-	};
-    pyWorker.onFigure = (imageDataURL) => {
-        document.getElementById("figure").src = imageDataURL;
-    };
-    pyWorker.onDirtyFile = (path) => {
-        dirtyFiles.push(path);
-    };
-    pyWorker.onFile = (path, data) => {
-        pyWorker.printToOutput("\nFile " + path + ":\n" + data + "\n");
-    };
-	pyWorker.onTimeout = () => {
-		pyWorker.printToOutput("\nTimeout\n");
-	};
-    pyWorker.onInput = (prompt) => {
-        outputEditor.gotoLine(1e9);
-        outputEditor.setReadOnly(false);
-        document.getElementById("output-editor").parentElement.className = "expect-input";
-        inputStart = outputEditor.getSelectionRange().start;
-        outputEditor.focus();
-    };
-
-	pyWorker.preload();
 }, false);
 
         </script>
-
-        <style type="text/css" media="screen">
-            #src-editor, #output-editor {
-                width: 95%;
-                height: 30em;
-            }
-
-            .expect-input .ace_gutter-cell:last-child {
-                background-color: #0f6;
-            }
-
-            .ace_gutter-cell.ace_breakpoint {
-                border-radius: 10px;
-                box-shadow: 0px 0px 2px 2px #08f inset;
-            }
-            .dbg-current-line {
-                background-color: #f88;
-            }
-        </style>
-
-        <style>
-            .busy {
-                display: inline-block;
-                width: 0.5em;
-                height: 0.5em;
-                border-radius: 50%;
-                border: 1px solid transparent;
-                border-top: 2px solid #f00;
-                border-bottom: 2px solid #f00;
-                animation: busy-rot 2s linear infinite;
-            }
-            @keyframes busy-rot {
-                0% {
-                    transform: rotate(0deg);
-                }
-                100% {
-                    transform: rotate(360deg);
-                }
-            }
-
-            .status {
-                color: silver;
-                font: 80% sans-serif;
-            }
-        </style>
-
-        <style>
-            h1, h2, h3, p {
-                font-family: sans-serif;
-            }
-            h1 {
-                font-size: 18px;
-            }
-            h2 {
-                font-size: 15px;
-            }
-            h3, p {
-                font-size: 12px;
-            }
-
-            div.columncontainer {
-            	display: flex;
-            	margin-left: 3em;
-            	margin-right: 3em;
-            }
-
-            div.columncontainer > div {
-            	margin-left: 0.5em;
-            	margin-right: 0.5em;
-            	margin-bottom: 0;
-            }
-            div.columncontainer > div:first-child {
-            	margin-left: 0;
-            }
-            div.columncontainer > div:last-child {
-            	margin-right: 0;
-            }
-
-            div.column2 {
-            	width: 50%;
-            }
-            div.column3 {
-            	width: 33%;
-            }
-            div.column4 {
-            	width: 25%;
-            }
-        </style>
-
 
 <script id="ex-def" type="text/x-sample-code">
 def f():
@@ -421,13 +213,13 @@ f()
 
         <p>
             Sample code:
-            <a onclick="setSource(document.getElementById('ex-def').textContent.trim());" href="#">def</a>
-            <a onclick="setSource(document.getElementById('ex-rec').textContent.trim());" href="#">recursive</a>
-            <a onclick="setSource(document.getElementById('ex-input').textContent.trim());" href="#">input</a>
-            <a onclick="setSource(document.getElementById('ex-files').textContent.trim());" href="#">files</a>
-            <a onclick="setSource(document.getElementById('ex-numpy').textContent.trim());" href="#">numpy</a>
-            <a onclick="setSource(document.getElementById('ex-matplotlib').textContent.trim());" href="#">matplotlib</a>
-            <a onclick="setSource(document.getElementById('ex-pandas').textContent.trim());" href="#">pandas</a>
+            <a onclick="pui.setSource(document.getElementById('ex-def').textContent.trim());" href="#">def</a>
+            <a onclick="pui.setSource(document.getElementById('ex-rec').textContent.trim());" href="#">recursive</a>
+            <a onclick="pui.setSource(document.getElementById('ex-input').textContent.trim());" href="#">input</a>
+            <a onclick="pui.setSource(document.getElementById('ex-files').textContent.trim());" href="#">files</a>
+            <a onclick="pui.setSource(document.getElementById('ex-numpy').textContent.trim());" href="#">numpy</a>
+            <a onclick="pui.setSource(document.getElementById('ex-matplotlib').textContent.trim());" href="#">matplotlib</a>
+            <a onclick="pui.setSource(document.getElementById('ex-pandas').textContent.trim());" href="#">pandas</a>
         </p>
 
         <p>
@@ -435,7 +227,7 @@ f()
             <button id="btn-stop" type="button" disabled>Stop</button>
             &nbsp;&nbsp;<span id="busy" class="busy" style="display: none"></span>
             &nbsp;&nbsp;<span id="status" class="status">loading...</span>
-            <span id="debugger">
+            <span id="debugger" style="display: none;">
                 &nbsp;&nbsp;
                 <button id="btn-dbg-next" type="button">Next</button>
                 <button id="btn-dbg-step" type="button">Step</button>
@@ -453,7 +245,6 @@ f()
 
         <p>
             <button id="btn-clear" type="button">Clear</button>
-            <button id="btn-dirty" type="button">Dirty</button>
         </p>
 
 	</div>

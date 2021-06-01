@@ -130,8 +130,7 @@ class Pyodide {
 
     load(then) {
         this.notifyStatus("loading Pyodide");
-        // self.languagePluginUrl = "pyodide-build-0.14.1/";
-	self.languagePluginUrl = "https://pyodide.cdn.iodide.io/";
+        self.languagePluginUrl = "pyodide-build-0.14.1/";
         languagePluginLoader.then(() => {
 
             this.notifyStatus("setup");
@@ -793,7 +792,7 @@ class Pyodide {
                     this.inputPrompt = null;
                 } catch (err) {}
             } else {
-                // submit input using evalu
+                // submit input using evaluator (coroutine)
                 try {
                     pyodide.runPython(`
                         import js

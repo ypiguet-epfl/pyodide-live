@@ -1,0 +1,45 @@
+/*
+    Stylesheet for pyodide in webworker with ace editor and debugger
+    Author: Yves Piguet, EPFL, 2019-2020
+*/
+
+#src-editor, #output-editor {
+    width: 95%;
+    height: 30em;
+}
+
+.expect-input .ace_gutter-cell:last-child {
+    background-color: #0f6;
+}
+
+.ace_gutter-cell.ace_breakpoint {
+    border-radius: 10px;
+    box-shadow: 0px 0px 2px 2px #08f inset;
+}
+.dbg-current-line {
+    background-color: #f88;
+}
+
+.busy {
+    display: inline-block;
+    width: 0.5em;
+    height: 0.5em;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    border-top: 2px solid #f00;
+    border-bottom: 2px solid #f00;
+    animation: busy-rot 2s linear infinite;
+}
+@keyframes busy-rot {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.status {
+    color: silver;
+    font: 80% sans-serif;
+}
