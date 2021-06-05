@@ -108,6 +108,11 @@ window.addEventListener("load", () => {
 
         </script>
 
+<script id="ex-version" type="text/x-sample-code">
+import sys
+print(sys.version)
+</script>
+
 <script id="ex-def" type="text/x-sample-code">
 def f():
   for i in range(10):
@@ -213,6 +218,7 @@ f()
 
         <p>
             Sample code:
+            <a onclick="pui.setSource(document.getElementById('ex-version').textContent.trim());" href="#">version</a>
             <a onclick="pui.setSource(document.getElementById('ex-def').textContent.trim());" href="#">def</a>
             <a onclick="pui.setSource(document.getElementById('ex-rec').textContent.trim());" href="#">recursive</a>
             <a onclick="pui.setSource(document.getElementById('ex-input').textContent.trim());" href="#">input</a>
