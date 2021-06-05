@@ -33,12 +33,14 @@ Author: Yves Piguet, EPFL, 2019-2021
 
 */
 
+importScripts("pyodide-class.js");
+
 // get Pyodide URL from query string if specified there, or use default
 const pyodideURL = self.location.search
 	? decodeURIComponent(self.location.search.replace(/^\?/, ""))
-	: "https://pyodide-cdn2.iodide.io/v0.15.0/full/pyodide.js";
+	: Pyodide.defaultURL;
 
-importScripts("pyodide-class.js", pyodideURL);
+importScripts(pyodideURL + "pyodide.js");
 
 var loaded = false;
 
@@ -122,7 +124,8 @@ onmessage = (ev) => {
                 }
             },
             handleInput: configOptions && configOptions.handleInput || false,
-            inlineInput: configOptions && configOptions.inlineInput || false
+            inlineInput: configOptions && configOptions.inlineInput || false,
+			pyodideURL: pyodideURL
         };
         p = new Pyodide(options);
     }
