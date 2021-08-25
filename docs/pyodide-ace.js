@@ -37,7 +37,7 @@ const pui = new PyodideUI(options);
 
 class PyodideUI {
     constructor(options) {
-        this.pyWorker = new PyWorker("pyodide-webworker.js");
+        this.pyWorker = new PyWorker("pyodide-webworker.js" + location.search);
         this.dirtyFiles = [];
         this.dbgCurrentLine = null;
         this.pyWorker.timeout = 60
